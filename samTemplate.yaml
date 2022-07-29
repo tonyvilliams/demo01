@@ -21,3 +21,9 @@ Resources:
       Environment:
         Variables:
           REGION: eu-west-2
+      VpcConfig:
+        SecurityGroupIds:
+          - sg-0ef0598463ebe908b
+        SubnetIds:
+          - subnet-03a0c3ae56c6bdce6
+          - subnet-088e3663d86d6ab33
