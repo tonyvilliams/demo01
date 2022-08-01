@@ -8,3 +8,6 @@ artifacts:
   files:
     - samTemplate.yaml
     - outputSamTemplate.yaml
+    - dev-config.json
+    - sit-config.json
+    - prod-config.json
