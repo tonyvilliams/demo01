@@ -1,0 +1,8 @@
+{
+    "environment": "prod",
+    "VpcCidr": "10.3.0.0/16",
+    "PublicSubnet1aCidr": "10.3.1.0/24",
+    "PublicSubnet1bCidr": "10.3.2.0/24",
+    "PrivateSubnet1aCidr": "10.3.3.0/24",
+    "PrivateSubnet1bCidr": "10.3.4.0/24"
+}

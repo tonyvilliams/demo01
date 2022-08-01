@@ -1,0 +1,8 @@
+{
+    "environment": "sit",
+    "VpcCidr": "10.2.0.0/16",
+    "PublicSubnet1aCidr": "10.2.1.0/24",
+    "PublicSubnet1bCidr": "10.2.2.0/24",
+    "PrivateSubnet1aCidr": "10.2.3.0/24",
+    "PrivateSubnet1bCidr": "10.2.4.0/24"
+}
