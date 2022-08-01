@@ -1,29 +1,332 @@
-AWSTemplateFormatVersion: '2010-09-09'
+AWSTemplateFormatVersion: 2010-09-09
 Transform: 'AWS::Serverless-2016-10-31'
-Description: CD Demo Lambda
+Description: "Deploy infrastructure requiredfor application to run"
+Parameters:
+  environment:
+    Type: String
+    Description: Environment in which the resources will be deployed
+    Default: dev
+  VpcCidr:
+    Type: String
+    Description: VPC Cidr in which the resources will be deployed
+    Default: 10.1.0.0/16
+  PublicSubnet1aCidr:
+    Type: String
+    Description: Public Subnet Cidr in which the resources will be deployed
+    Default: 10.1.1.0/24
+  PublicSubnet1bCidr:
+    Type: String
+    Description: Public Subnet Cidr in which the resources will be deployed
+    Default: 10.1.2.0/24
+  PrivateSubnet1aCidr:
+    Type: String
+    Description: Private Subnet Cidr in which the resources will be deployed
+    Default: 10.1.3.0/24
+  PrivateSubnet1bCidr:
+    Type: String
+    Description: Private Subnet Cidr in which the resources will be deployed
+    Default: 10.1.4.0/24
+  
+Conditions:
+  IsProd: !Equals [!Ref environment, 'dev']
+
 Resources:
+  pubPrivateVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      Tags:
+        - Key: Name
+          Value: !Ref AWS::StackName
+  publicSubnet1a:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref pubPrivateVPC
+      AvailabilityZone:
+        Fn::Select:
+         - 0
+         - Fn::GetAZs: ""
+      CidrBlock: !Ref PublicSubnet1aCidr
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Join ["-", [!Ref "AWS::StackName","public-subnet1a"]]
+  publicSubnet1b:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref pubPrivateVPC
+      AvailabilityZone:
+        Fn::Select:
+         - 1
+         - Fn::GetAZs: ""
+      CidrBlock: !Ref PublicSubnet1bCidr
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Join ["-", [!Ref "AWS::StackName","public-subnet1b"]]
+  privateSubnet1a:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref pubPrivateVPC
+      AvailabilityZone:
+        Fn::Select:
+         - 0
+         - Fn::GetAZs: ""
+      CidrBlock: !Ref PrivateSubnet1aCidr
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Join ["-", [!Ref "AWS::StackName","private-subnet1a"]]
+  privateSubnet1b:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref pubPrivateVPC
+      AvailabilityZone:
+        Fn::Select:
+         - 1
+         - Fn::GetAZs: ""
+      CidrBlock: !Ref PrivateSubnet1bCidr
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Join ["-", [!Ref "AWS::StackName","private-subnet1b"]]    
+  internetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Join ["-", [!Ref "AWS::StackName","gateway"]]
+  gatewayToInternet:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref pubPrivateVPC
+      InternetGatewayId: !Ref internetGateway
+  publicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref pubPrivateVPC
+  publicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: gatewayToInternet
+    Properties:
+      RouteTableId: !Ref publicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref internetGateway
+  publicSubnet1aRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref publicSubnet1a
+      RouteTableId: !Ref publicRouteTable
+  publicSubnet1bRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref publicSubnet1b
+      RouteTableId: !Ref publicRouteTable
+  natGateway1a:
+    Type: AWS::EC2::NatGateway
+    DependsOn: natPublicIP1a
+    Properties:
+      AllocationId: !GetAtt natPublicIP1a.AllocationId
+      SubnetId: !Ref publicSubnet1a
+  natPublicIP1a:
+    Type: AWS::EC2::EIP
+    DependsOn: pubPrivateVPC
+    Properties:
+      Domain: vpc
+  RouteTable1a:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref pubPrivateVPC
+  RouteTable1b:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref pubPrivateVPC
+  Route1a:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref RouteTable1a
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref natGateway1a
+  Route1b:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref RouteTable1b
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref natGateway1a
+  privateSubnet1aRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref privateSubnet1a
+      RouteTableId: !Ref RouteTable1a
+  privateSubnet1bRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref privateSubnet1b
+      RouteTableId: !Ref RouteTable1b
+  
+  LambdaIAMRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+        Path: "/"
+        RoleName: !Join ["-", [!Ref "AWS::StackName","ServiceRole"]]
+        AssumeRolePolicyDocument: "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Sid\":\"\",\"Effect\":\"Allow\",\"Principal\":{\"Service\":\"cloudformation.amazonaws.com\"},\"Action\":\"sts:AssumeRole\"},{\"Effect\":\"Allow\",\"Principal\":{\"Service\":\"lambda.amazonaws.com\"},\"Action\":\"sts:AssumeRole\"}]}"
+        MaxSessionDuration: 3600
+        ManagedPolicyArns: 
+          - "arn:aws:iam::aws:policy/IAMFullAccess"
+          - "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryFullAccess"
+          - "arn:aws:iam::aws:policy/AmazonS3FullAccess"
+          - "arn:aws:iam::aws:policy/AmazonAPIGatewayAdministrator"
+          - "arn:aws:iam::aws:policy/AWSCloudFormationFullAccess"
+          - "arn:aws:iam::aws:policy/AWSLambda_FullAccess"
+          - "arn:aws:iam::aws:policy/AmazonEC2FullAccess"
+          - "arn:aws:iam::aws:policy/AWSWAFFullAccess"
+        Description: "Allows Lambda functions to call AWS services Through deployment pipeline."
+
+  DynamoDBTable:
+    Type: "AWS::DynamoDB::Table"
+    Properties:
+        AttributeDefinitions: 
+          - AttributeName: "uuid"
+            AttributeType: "S"
+        TableName: !Join ["-", [!Ref "AWS::StackName", "Table"]]
+        KeySchema: 
+          - AttributeName: "uuid"
+            KeyType: "HASH"
+        ProvisionedThroughput: 
+            ReadCapacityUnits: 1
+            WriteCapacityUnits: 1
+  ApiDeployment:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: !Ref environment
+
   CDDemoLambda:
     Type: 'AWS::Serverless::Function'
     Properties:
       Handler: lambda_function.lambda_handler
       Runtime: python3.7
-      CodeUri: ./LambdaCode
+      CodeUri: s3://devopsawsbgl01/lambda_function.py.zip
       Description: 'Lambda function for CD Demo'
       MemorySize: 128
       Timeout: 30
-      Role: 'arn:aws:iam::974361912317:role/CloudFormationServiceRoleDemo02'
+      Role: !GetAtt LambdaIAMRole.Arn
       Events:
         getAZsAPI:
           Type: Api
           Properties:
             Path: /getazs
             Method: get
+            RestApiId: !Ref ApiDeployment
       Environment:
         Variables:
           REGION: eu-west-2
       VpcConfig:
         SecurityGroupIds:
-          - sg-0ef0598463ebe908b
-        SubnetIds:
-          - subnet-03a0c3ae56c6bdce6
-          - subnet-088e3663d86d6ab33
+          - !GetAtt pubPrivateVPC.DefaultSecurityGroup
+        SubnetIds: 
+          - !Ref privateSubnet1a
+          - !Ref privateSubnet1b
+  WAFv2WebACL:
+    Condition: IsProd
+    Type: "AWS::WAFv2::WebACL"
+    Properties:
+      Name: demowebacl-01
+      Description: "demowebacl"
+      DefaultAction: 
+          Allow: {}
+      VisibilityConfig: 
+          SampledRequestsEnabled: true
+          CloudWatchMetricsEnabled: true
+          MetricName: demowebacl1
+      Scope: REGIONAL
+      Rules: 
+        - Name: iprules01
+          Priority: 0
+          Action: 
+              Block: {}
+          Statement: 
+              IPSetReferenceStatement: 
+                  Arn: !GetAtt WAFv2IPSet.Arn
+          VisibilityConfig: 
+              SampledRequestsEnabled: true
+              CloudWatchMetricsEnabled: true
+              MetricName: iprules01
+  WAFv2IPSet:
+    Condition: IsProd
+    Type: "AWS::WAFv2::IPSet"
+    Properties:
+        Name: "Black-listed-ips"
+        Description: "demo blacklisted ips"
+        IPAddressVersion: "IPV4"
+        Addresses: 
+          - "90.243.33.43/32"
+          - "10.0.0.0/32"
+        Scope: "REGIONAL"
+  WAFv2WebACLAssociation:
+    Condition: IsProd
+    DependsOn: ["CDDemoLambda", "ApiDeployment" ]
+    Type: "AWS::WAFv2::WebACLAssociation"
+    Properties:
+        WebACLArn: !GetAtt WAFv2WebACL.Arn
+        ResourceArn: !Sub 
+        - "arn:aws:apigateway:${AWS::Region}::/restapis/${ServerlessRestApi}/stages/${Stage}"
+        - Stage: !Ref environment
+          ServerlessRestApi: !Ref ApiDeployment
+          Region: !Ref AWS::Region
+
+Outputs:
+  pubPrivateVPCID:
+    Description: VPC ID
+    Value: !Ref pubPrivateVPC
+    Export:
+      Name: !Join ["-", [!Ref "AWS::StackName",  "vpc"]]
+  devSubnet1aID:
+    Description: Private Subnet A ID
+    Value: !Ref privateSubnet1a
+    Export:
+      Name: !Join ["-", [!Ref "AWS::StackName", "private-subnet1a"]] 
+  privateSubnet1bID:
+    Description: Private Subnet B ID
+    Value: !Ref privateSubnet1b
+    Export:
+      Name: !Join ["-", [!Ref "AWS::StackName", "private-subnet1b"]]       
+  privateVPCSecurityGroup:
+    Description: Default security for Lambda VPC
+    Value: !GetAtt pubPrivateVPC.DefaultSecurityGroup
+    Export:
+      Name: !Join ["-", [!Ref "AWS::StackName", "vpc-sg"]]
+  APIUrl:
+    Value:
+      Fn::Sub:
+      - https://${ServerlessRestApi}.execute-api.${Region}.amazonaws.com/${Stage}/getazs
+      - Region: !Ref AWS::Region
+        ServerlessRestApi: !Ref ApiDeployment
+        Stage: !Ref environment
+  
+    # devDbParameter:
+  #   Type: AWS::SSM::Parameter
+  #   Properties:
+  #     Name: devTableName
+  #     Type: String
+  #     Value: devdbtable01
+  #     Description: Table Name of Dynamo DB in Dev Environment.
+  #     Tags:
+  #       Environment: DEV
+  # sitDbParameter:
+  #   Type: AWS::SSM::Parameter
+  #   Properties:
+  #     Name: sitTableName
+  #     Type: String
+  #     Value: sitdbtable01
+  #     Description: Table Name of Dynamo DB in Sit Environment.
+  #     Tags:
+  #       Environment: SIT
+  # prodDbParameter:
+  #   Type: AWS::SSM::Parameter
+  #   Properties:
+  #     Name: prodTableName
+  #     Type: String
+  #     Value: proddbtable01
+  #     Description: Table Name of Dynamo DB in PROD Environment.
+  #     Tags:
+  #       Environment: PROD
