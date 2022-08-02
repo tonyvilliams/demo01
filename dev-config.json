@@ -13,7 +13,7 @@
     "StackPolicy": {
         "statement": [{
             "Effect": "Allow",
-            "NotAction": "Update:Delete",
+            "Action": "Update:*",
             "Principal": "*",
             "Resource": "*"
         }]
