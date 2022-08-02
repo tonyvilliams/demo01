@@ -28,7 +28,7 @@ Parameters:
     Default: 10.1.4.0/24
   
 Conditions:
-  IsProd: !Equals [!Ref environment, 'dev']
+  IsProd: !Equals [!Ref environment, 'prod']
 
 Resources:
   pubPrivateVPC:
@@ -205,7 +205,7 @@ Resources:
     Properties:
       Handler: lambda_function.lambda_handler
       Runtime: python3.7
-      CodeUri: s3://devopsawsbgl01/lambda_function.py.zip
+      CodeUri: .LambdaCode
       Description: 'Lambda function for CD Demo'
       MemorySize: 128
       Timeout: 30
